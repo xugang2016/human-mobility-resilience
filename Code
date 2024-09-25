@@ -19,11 +19,13 @@ a <- list.files("2020")
 dir <- paste("./2020/",a,sep="")
 n <- length(dir)
 
+# Define date range for analysis
 date1 <- as.POSIXct(paste("2020-2-15"))
 date2 <- as.POSIXct(paste("2020-8-15"))
 int <- interval(date1,date2)
 date <- date2 - date1
 
+# Create empty data frames to store results
 dataAll <- data.frame(matrix(ncol=8,nrow=0))
 colnames(dataAll) <- c("Country","Date","RetailAndRecreation","GroceryAndPharmacy","Transit","Park","Workplace","Residential")
 dataAverage <- data.frame(matrix(ncol=8,nrow=0))
@@ -33,6 +35,7 @@ colnames(dataResult) <- c("Country","Country_code","Location","Begin","Lowest","
 
 location <- c("Retail and Recreation","Grocery and Pharmacy","Park","Transit station","Workplace","Residential")
 
+# Loop through each file to process data
 for(i in 1:n){
   countryCode <- unlist(strsplit(a[i],split="_"))[2]
   mydata <- read.csv(file=dir[i],header=TRUE,sep=",",na.strings="",encoding='UTF-8')
@@ -53,12 +56,17 @@ for(i in 1:n){
   for(j in 3:8)
   {
     timeserie <- ts(dataCountry[,j],frequency=7)
+
+    # Check for NA values in the time series
     if(sum(is.na(timeserie))>0){
       dataCountry_stl[,j] <- rep(NA,date+1)
       next
     }
+
+    # Perform STL decomposition
     result <- stl(timeserie,"periodic",robust=T)
     dataCountry_stl[,j] <- as.data.frame(result$time.series)$trend
+
     dataResult[6*(i-1)+j-2,]$Country <- countryName
     dataResult[6*(i-1)+j-2,]$Country_code <- countryCode
     dataResult[6*(i-1)+j-2,]$Location <- location[j-2]
@@ -84,10 +92,15 @@ for(i in 1:n){
     dataResult[6*(i-1)+j-2,]$DIc <- dataResult[6*(i-1)+j-2,]$Ic/(dataResult[6*(i-1)+j-2,]$End-dataResult[6*(i-1)+j-2,]$Lowest)
   }
   
+  # Set column names for the data frame
   colnames(dataCountry) <- c("Country","Date","Retail and Recreation","Grocery and Pharmacy","Park","Transit station","Workplace","Residential")
   colnames(dataCountry_stl) <- c("Country","Date","Retail and Recreation","Grocery and Pharmacy","Park","Transit station","Workplace","Residential")  
+  
+  # Select specific columns for further analysis
   dataCountry <- dataCountry[, c("Country","Date","Retail and Recreation","Grocery and Pharmacy","Transit station","Park","Workplace","Residential")]
   dataCountry_stl <- dataCountry_stl[, c("Country","Date","Retail and Recreation","Grocery and Pharmacy","Transit station","Park","Workplace","Residential")]
+  
+  # Combine country data into a single data frame
   dataAll <- rbind(dataAll,dataCountry)
   dataAverage <- rbind(dataAverage,dataCountry_stl)
 }
@@ -95,6 +108,7 @@ for(i in 1:n){
 write.csv(dataResult,"各国指标.csv",na="")
 
 
+# Reshape data to long format for visualization
 dataLongall <- melt(dataAll,id=c("Country","Date"))
 dataLong <- melt(dataAverage,id=c("Country","Date"))
 
@@ -104,6 +118,7 @@ dataLong <- left_join(dataLong,continent,by="Country")
 dataLong$Continent[which(dataLong$Country == "Réunion")] <- "Africa"
 dataLong$Continent[which(dataLong$Country == "Côte d'Ivoire")] <- "Africa"
 
+# Aggregate data by variable and date
 global <- aggregate(x=dataLong$value,
                     by=list(dataLong$variable,dataLong$Date),
                     FUN=mean,
@@ -180,6 +195,7 @@ tiff(file="Figure1e.tiff", res=600, width=1000, height=830, compression="lzw")
 p.resi 
 dev.off()
 
+# Combine workplace and residential plots into one figure
 tiff(file="Changes in work+resi.tiff", res=600, width=1400, height=2000, compression="lzw")
 ggarrange(p.work,p.resi,
           nrow=2,
@@ -187,6 +203,7 @@ ggarrange(p.work,p.resi,
 dev.off()
 
 
+# Filter out specific countries from data for Workplace analysis
 dataAverage_wp <- dataAverage[-which(dataAverage$Country %in% c("Taiwan","Hong Kong","Réunion","Liechtenstein")),c(1,2,7)]
 dataResult_wp <- dataResult[which(dataResult$Location=="Workplace"),]
 dataResult_wp <- dataResult_wp[-which(dataResult_wp$Country %in% c("Taiwan","Hong Kong","Réunion","Liechtenstein")),]
@@ -215,6 +232,7 @@ tiff(file="FigureS4.tiff", res=600, width=3600, height=5200, compression="lzw")
 p_period
 dev.off()
 
+# Filter out additional countries for Residential analysis
 dataAverage_wp <- dataAverage[-which(dataAverage$Country %in% c("Taiwan","Hong Kong","Réunion","Liechtenstein","Antigua and Barbuda","Aruba","Barbados","Belize","Cape Verde","Guinea-Bissau","Luxembourg","Papua New Guinea")),c(1,2,8)]
 dataResult_wp <- dataResult[which(dataResult$Location=="Residential"),]
 dataResult_wp <- dataResult_wp[-which(dataResult_wp$Country %in% c("Taiwan","Hong Kong","Réunion","Liechtenstein","Antigua and Barbuda","Aruba","Barbados","Belize","Cape Verde","Guinea-Bissau","Luxembourg","Papua New Guinea")),]
@@ -244,9 +262,11 @@ p_period
 dev.off()
 
 
+# Set country and location for STL decomposition
 Country_stl <- "United States"
 Location_stl <- "Workplace"
 
+# Create time series object and perform STL decomposition
 timeserie_stl <- ts(dataAll[which(dataAll$Country == Country_stl),Location_stl],frequency=7)
 result_stl <- stl(timeserie_stl,"periodic",robust=T)
 
@@ -280,10 +300,14 @@ dev.off()
 
 dataResult <- read.csv("各国指标.csv", header=TRUE, sep=",", na.strings="", encoding='UTF-8')
 
+# Log-transform selected columns and handle zero values
 dfR <- dataResult %>%
   mutate(across(c(Ts, Tc, Ms, Mc, Vs, Vc, Is, Ic, DIs, DIc), ~if_else(. == 0, NA_real_, log10(.))))
 
+# Remove rows with NA values
 dfR <- na.omit(dfR)
+
+# Set factor levels for the Location column
 dfR$Location <- factor(dfR$Location, levels=c("Retail and Recreation","Grocery and Pharmacy","Transit station","Park","Workplace","Residential"))
 
 p1 <- ggplot(data=dfR,aes(x=DIs,y=DIc,color=Location))+
@@ -373,6 +397,7 @@ p6 <- ggplot(data=dfR,aes(x=Ts,y=Tc,color=Location))+
   scale_color_manual(labels=c("Retail and Recreation","Grocery and Pharmacy","Transit station","Park","Workplace","Residential"),
                      values=c("#ef476f","#f78c6b","#ffd166","#06d6a0","#118ab2","#073b4c"))
 
+# Combine plots into a single figure and save as TIFF
 tiff(file="Figure4.tiff", res=600, width=3400, height=2000, compression="lzw")
 ggarrange(p5,p4,p3,p2,p1,p6,
           ncol=3,nrow=2,
@@ -389,14 +414,18 @@ df1 <- dataResult %>%
   mutate(across(c(Ts, Tc, Ms, Mc, Vs, Vc, Is, Ic, DIs, DIc), ~if_else(. == 0, NA_real_, log10(.))))
 
 df1 <- na.omit(df1)
+
 df1$Location <- factor(df1$Location, levels=c("Retail and Recreation","Grocery and Pharmacy","Transit station","Park","Workplace","Residential"))
 
 COVID <- read.csv("WHO-COVID-19-global-data.csv", header=TRUE, sep=",", na.strings="", encoding='UTF-8')
 population <- read.csv("Country-population.csv", header=TRUE, sep=",", na.strings="", encoding='UTF-8')
 code <- read.csv("Country-code-2-and-3-letters.csv", header=TRUE, sep=",", na.strings="", encoding='UTF-8')
+
+# Rename columns for clarity
 colnames(population)[1] <- "Country"
 colnames(code) <- c("Country","Country.Code","Country_code")
 
+# Filter COVID data by date
 date1 <- as.POSIXct(paste("2020-2-15"))
 date2 <- as.POSIXct(paste("2021-01-01"))
 int <- interval(date1,date2)
@@ -404,14 +433,18 @@ date <- date2 - date1
 COVID$Date_reported <- ymd(COVID$Date_reported)
 COVID <- COVID[COVID$Date_reported %within% int,]
 
+# Calculate cumulative case rates
 COVID_rate <- left_join(COVID, code, by="Country_code")
 COVID_rate <- left_join(COVID_rate, population, by="Country.Code")
 COVID_rate <- COVID_rate %>% mutate(Cumulative_cases_rate=log10(Cumulative_cases/Pop2020))
 COVID_rate <- COVID_rate %>% mutate(Cumulative_deaths_rate=log10(Cumulative_deaths/Pop2020))
+
+# Merge dataframes and reshape
 df2 <- left_join(df1, COVID_rate, by="Country_code")
 df2 <- df2[,c("Country.x.x","Location","Ts","Tc","Ms","Mc","Vs","Vc","Is","Ic","DIs","DIc","Date_reported","Cumulative_cases_rate","Cumulative_deaths_rate")]
 df2 <- melt(df2,measure.vars=c("Ts","Tc","Ms","Mc","Vs","Vc","Is","Ic","DIs","DIc"))
 
+# Rename factors for better understanding
 df2$variable <- factor(df2$variable, levels = c("Ts","Tc","Ms","Mc","Vs","Vc","Is","Ic","DIs","DIc")) 
 levels(df2$variable)[levels(df2$variable)=='Ts'] <- "Duration of Resistance"
 levels(df2$variable)[levels(df2$variable)=='Tc'] <- "Duration of Recovery"
@@ -424,6 +457,7 @@ levels(df2$variable)[levels(df2$variable)=='Ic'] <- "Integrative Recovery"
 levels(df2$variable)[levels(df2$variable)=='DIs'] <- "Daily Integrative Resistance"
 levels(df2$variable)[levels(df2$variable)=='DIc'] <- "Daily Integrative Recovery"
 
+# Filter for specific date and finite values
 df3 <- df2 %>% filter(Date_reported == ymd("2020-12-31")) %>% filter(is.finite(Cumulative_cases_rate)) %>% filter(is.finite(Cumulative_deaths_rate))
 
 pm <- ggplot(df3,aes(x=as.numeric(value),y=Cumulative_cases_rate,color=Location))+
@@ -520,7 +554,6 @@ pccmtl <- ggplot(dddf,aes(x=Date_reported,y=cor_deaths,color=Location))+
         #legend.title=element_blank(),
         #legend.box.margin=margin(-7,0,0,0),
         #legend.margin=margin(0,0,0,0),
-        #分面和面板设置
         strip.background=element_blank(),
         panel.spacing.y=unit(0.75,"lines"),
         panel.grid=element_blank(),
